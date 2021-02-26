@@ -124,13 +124,57 @@ vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)
 	// Task 5 - Lookup the irradiance from the irradiance map and calculate
 	//          the diffuse reflection
 	///////////////////////////////////////////////////////////////////////////
+	vec3 nws = vec3(viewInverse * vec4(n, 1.0));
 
+	// Calculate the world-space direction from the camera to that position
+	vec3 dir = normalize(nws);
+
+	// Calculate the spherical coordinates of the direction
+	float theta = acos(max(-1.0f, min(1.0f, dir.y)));
+	float phi = atan(dir.z, dir.x);
+	if(phi < 0.0f)
+	{
+		phi = phi + 2.0f * PI;
+	}
+	vec2 lookup = vec2(phi / (2.0 * PI), theta / PI);
+	vec4 irradiance = environment_multiplier * texture(environmentMap, lookup);
+
+	vec4 diffuse_term = vec4(material_color,1.0) * (1.0 / PI) * irradiance;
 	///////////////////////////////////////////////////////////////////////////
 	// Task 6 - Look up in the reflection map from the perfect specular
 	//          direction and calculate the dielectric and metal terms.
 	///////////////////////////////////////////////////////////////////////////
+	vec3 wi = normalize(-reflect(wo,n));
 
-	return indirect_illum;
+	dir = normalize (vec3(viewInverse * vec4 (wi,0.0f)));
+
+	theta = acos(max(-1.0f, min(1.0f, dir.y)));
+	phi = atan(dir.z, dir.x);
+	if(phi < 0.0f)
+	{
+		phi = phi + 2.0f * PI;
+	}
+	// Use these to lookup the color in the environment map
+	lookup = vec2(phi / (2.0 * PI), theta / PI);
+
+	float s = material_shininess;
+	float roughness = sqrt(sqrt(2/(s+2)));
+	
+	vec3 Li = environment_multiplier * textureLod(reflectionMap, lookup, roughness * 7.0).xyz;
+
+	vec3 wh = normalize(wi + wo);
+    
+	float fresnelWi = material_fresnel + (1 - material_fresnel) * pow((1 - dot(wh, wi)), 5);
+
+	vec3 dielectric_term = fresnelWi * Li + (1 - fresnelWi) * vec3(diffuse_term);
+	vec3 metal_term = fresnelWi * material_color * Li;
+
+	float m = material_metalness;
+	float r = material_reflectivity;
+
+	vec3 microfacet_term = m * metal_term + (1 - m) * dielectric_term;
+	
+	return r * microfacet_term + (1 - r) * vec3(diffuse_term);
 }
 
 
