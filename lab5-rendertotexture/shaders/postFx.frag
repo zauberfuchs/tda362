@@ -5,6 +5,7 @@ precision highp float;
 
 layout(binding = 0) uniform sampler2D frameBufferTexture;
 layout(binding = 1) uniform sampler2D blurredFrameBufferTexture;
+layout(binding = 2) uniform sampler2D bloomedFrameBufferTexture;
 uniform float time = 0.f;
 uniform int currentEffect = 0;
 uniform int filterSize = 1;
@@ -47,6 +48,16 @@ vec3 grayscale(vec3 rgbSample);
  */
 vec3 toSepiaTone(vec3 rgbSample);
 
+/**
+ * Simply returns the mosaic.
+ */
+vec3 mosaic(vec2 coord);
+
+vec4 bloomTextureRect(in sampler2D tex, vec2 rectangleCoord)
+{
+	return texture(tex, rectangleCoord / textureSize(tex, 0)) + texture(bloomedFrameBufferTexture, rectangleCoord / textureSize(tex, 0)) * 5;
+}
+
 
 
 void main()
@@ -73,13 +84,13 @@ void main()
 		fragmentColor = vec4(toSepiaTone(blur(mushrooms(gl_FragCoord.xy))), 1.0);
 		break;
 	case 6:
-		fragmentColor = vec4(0.0); // place holder
+		fragmentColor = vec4(mosaic(gl_FragCoord.xy), 1.0);
 		break;
 	case 7:
-		fragmentColor = vec4(0.0); // place holder
+		fragmentColor = textureRect(blurredFrameBufferTexture, gl_FragCoord.xy);
 		break;
 	case 8:
-		fragmentColor = vec4(0.0); // place holder
+		fragmentColor = bloomTextureRect(frameBufferTexture, gl_FragCoord.xy);
 		break;
 	}
 }
@@ -130,3 +141,17 @@ vec3 grayscale(vec3 rgbSample)
 {
 	return vec3(rgbSample.r * 0.2126 + rgbSample.g * 0.7152 + rgbSample.b * 0.0722);
 }
+
+vec3 mosaic(vec2 coord)
+{
+	float mosaicSize = 10;
+	
+	float x_diff = mod(coord.x,mosaicSize);
+	float y_diff = mod(coord.y,mosaicSize);
+
+	vec2 getFrom = vec2(coord.x - x_diff,coord.y - y_diff);
+
+	return textureRect(frameBufferTexture,getFrom).xyz;
+}
+
+
