@@ -28,9 +28,8 @@ uniform float environment_multiplier;
 // Light source
 ///////////////////////////////////////////////////////////////////////////////
 uniform vec3 point_light_color = vec3(1.0, 1.0, 1.0);
-uniform float point_light_intensity_multiplier = 50.0;
+uniform float point_light_intensity_multiplier = 100.0;
 uniform mat4 lightMatrix;
-layout(binding = 10) uniform sampler2D shadowMapTex;
 ///////////////////////////////////////////////////////////////////////////////
 // Constants
 ///////////////////////////////////////////////////////////////////////////////
@@ -42,7 +41,6 @@ layout(binding = 10) uniform sampler2D shadowMapTex;
 in vec2 texCoord;
 in vec3 viewSpaceNormal;
 in vec3 viewSpacePosition;
-in vec4 shadowMapCoord;
 ///////////////////////////////////////////////////////////////////////////////
 // Input uniform variables
 ///////////////////////////////////////////////////////////////////////////////
@@ -55,7 +53,19 @@ uniform vec3 viewSpaceLightPosition;
 ///////////////////////////////////////////////////////////////////////////////
 layout(location = 0) out vec4 fragmentColor;
 
+///////////////////////////////////////////////////////////////////////////////
+// Shadow map
+///////////////////////////////////////////////////////////////////////////////
+in vec4 shadowMapCoord;
+//We change the type of texture sampler were going to use as we want hardware support for our shadow maps
+layout(binding = 10) uniform sampler2DShadow shadowMapTex;
 
+///////////////////////////////////////////////////////////////////////////////
+// spotlight
+///////////////////////////////////////////////////////////////////////////////
+uniform vec3 viewSpaceLightDir;
+uniform float spotOuterAngle;
+uniform float spotInnerAngle;
 
 vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color)
 {
@@ -182,10 +192,33 @@ vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)
 
 void main()
 {
+	vec4 shadowMapCoord = lightMatrix * vec4(viewSpacePosition, 1.f);
+
+	//we sample the depth value from the shadow map at the correct location. 
+	//(shadowMapCoord contains converted position from the current fragment, in shadowMap space)
+	//When fetching it we only need x because it's a gray scale when we stored it anyway.
+	//QUESTION, why are we dividing by w? I guess its because the various transfo (and the scale) might have affected the projection?
+	//float depth = texture(shadowMapTex, shadowMapCoord.xy / shadowMapCoord.w).r;
 	
-	float depth = texture(shadowMapTex, shadowMapCoord.xy / shadowMapCoord.w).x;
-	float visibility = (depth >= (shadowMapCoord.z / shadowMapCoord.w)) ? 1.0 : 0.0;
+	//Then, we compare the depth value from the shadow map with the fragments depth (in the shadowMap coordinate system).
+	//Hence the comparison of depth (extracted from the texture, the Z buffer of the light) against shadowMapCoord.z normalized
+	//If the depth from the shadow map is larger than the fragments depth
+	//then the fragment is lit. Otherwise, its shadowed.
+	//Because z buffer at 0 means fragment is in the near plane, otherwise 1 means it's the far plane
+	//float visibility = (depth >= (shadowMapCoord.z / shadowMapCoord.w)) ? 1.0 : 0.0;
+	float visibility = textureProj( shadowMapTex, shadowMapCoord );
+	//We commented the previous depth and visibility calculation, as we will use hardware support for shadow map instead
+
 	float attenuation = 1.0;
+
+
+	vec3 posToLight = normalize(viewSpaceLightPosition - viewSpacePosition);
+	float cosAngle = dot(posToLight, -viewSpaceLightDir);
+
+	// Spotlight with hard border:
+	float spotAttenuation = smoothstep(spotOuterAngle, spotInnerAngle, cosAngle);
+	visibility *= spotAttenuation;
+
 
 
 	vec3 wo = -normalize(viewSpacePosition);
@@ -207,9 +240,6 @@ void main()
 	}
 
 	vec3 shading = direct_illumination_term + indirect_illumination_term + emission_term;
-
-
-	vec4 shadowMapCoord = lightMatrix * vec4(viewSpacePosition, 1.f);
 	
 
 	fragmentColor = vec4(shading, 1.0);

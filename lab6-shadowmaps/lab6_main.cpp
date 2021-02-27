@@ -139,6 +139,9 @@ void initGL()
 	///////////////////////////////////////////////////////////////////////
 	shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
 
+	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
 
 	glEnable(GL_DEPTH_TEST); // enable Z-buffering
 	glEnable(GL_CULL_FACE);  // enables backface culling
@@ -181,7 +184,22 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
 	                          normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
 	labhelper::setUniformSlow(currentShaderProgram, "spotOuterAngle", std::cos(radians(outerSpotlightAngle)));
+	labhelper::setUniformSlow(currentShaderProgram, "spotInnerAngle", std::cos(radians(innerSpotlightAngle)));
+	//Task 2: Using the shadow map
+	//We calculate the matrix that converts from camera space to light space
+	//First, inverse(viewMatrix) transforms from (camera) view space to world space;
+	//next lightViewMatrix transforms from world space to light view space;
+	//finally, lightProjectionMatrix transforms from light view space to light clip space.
+	//Thus, lightMatrix transforms a coordinate from camera view space to light clip space.
+	//After these transformations, shadowMapCoord is in light clip space.
+	//Light clip space has coordinates in the range(-1, -1, -1) to(+1, +1, +1).
+	//However, texture coordinates run from(0, 0) to(1, 1).
+	//The depth value weve stored in our shadow map has the same range, i.e.between 0 and 1.
+	//So, its convenient to rescale our coordinates here.
+	//That's what the translate() and scale() matrices are there for, they remap from clip space to texture-coordinates space. 
+	mat4 lightMatrix = translate(vec3(0.5f)) * scale(vec3(0.5f)) * lightProjectionMatrix * lightViewMatrix * inverse(viewMatrix);
 
+	labhelper::setUniformSlow(currentShaderProgram, "lightMatrix", lightMatrix);
 
 
 	// Environment
@@ -251,30 +269,43 @@ void display(void)
 	{
 		shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
 	}
+	if (shadowMapClampMode == ClampMode::Edge) {
+		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+
+	if (shadowMapClampMode == ClampMode::Border) {
+		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+		vec4 border(shadowMapClampBorderShadowed ? 0.f : 1.f);
+		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &border.x);
+	}
+	
+
+	///////////////////////////////////////////////////////////////////////////
+	// Draw Shadow Map
+	///////////////////////////////////////////////////////////////////////////
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFB.framebufferId);
 	glViewport(0, 0, shadowMapFB.width, shadowMapFB.height);
 	glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
-	
-	
-	mat4 lightMatrix = translate(vec3(0.5f)) * scale(vec3(0.5f)) * lightProjMatrix * lightViewMatrix * inverse(viewMatrix);
-	labhelper::setUniformSlow(simpleShaderProgram, "lightMatrix", lightMatrix);
-	glActiveTexture(GL_TEXTURE10);
-	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
+	if (usePolygonOffset) {
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glPolygonOffset(polygonOffset_factor, polygonOffset_units);
+	}
+	//draw the scene with simple shader, to get the Z value for the light getting projected onto the scene
 	drawScene(simpleShaderProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
 
+	if (usePolygonOffset) {
+		glDisable(GL_POLYGON_OFFSET_FILL);
+	}
+	//Visualize this on the screens by changing the texture id for the emissive texture of the screen
 	labhelper::Material& screen = landingpadModel->m_materials[8];
 	screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTarget;
-
-
-	///////////////////////////////////////////////////////////////////////////
-	// Draw Shadow Map
-	///////////////////////////////////////////////////////////////////////////
-	
-
-
 	///////////////////////////////////////////////////////////////////////////
 	// Draw from camera
 	///////////////////////////////////////////////////////////////////////////
@@ -282,6 +313,10 @@ void display(void)
 	glViewport(0, 0, w, h);
 	glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+	glActiveTexture(GL_TEXTURE10);
+	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 
 	drawBackground(viewMatrix, projMatrix);
 	drawScene(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
