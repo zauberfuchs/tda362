@@ -361,11 +361,6 @@ void display()
 
 	//Up to now, we have rendered the scene and the camera to the normalCameraFB.
 	//Now let's bind the horizontalBlurFB
-	//FboInfo& postProcessFbo = fboList[0];
-	//glBindFramebuffer(GL_FRAMEBUFFER, postProcessFbo.framebufferId);
-	//glActiveTexture(GL_TEXTURE0);
-	//glBindTexture(GL_TEXTURE_2D, userCam.colorTextureTarget);
-
 	FboInfo& horizontalBlurFB = fboList[2];
 	glBindFramebuffer(GL_FRAMEBUFFER, horizontalBlurFB.framebufferId);
 	glViewport(0, 0, horizontalBlurFB.width, horizontalBlurFB.height);
@@ -405,8 +400,8 @@ void display()
 	FboInfo& bloomFB = fboList[4];
 	glBindFramebuffer(GL_FRAMEBUFFER, bloomFB.framebufferId);
 	glViewport(0, 0, bloomFB.width, bloomFB.height);
-	glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	//glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
+	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	//We set the cutOffShader
 	glUseProgram(cutoffShader);

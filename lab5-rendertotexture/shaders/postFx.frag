@@ -55,7 +55,7 @@ vec3 mosaic(vec2 coord);
 
 vec4 bloomTextureRect(in sampler2D tex, vec2 rectangleCoord)
 {
-	return texture(tex, rectangleCoord / textureSize(tex, 0)) + texture(bloomedFrameBufferTexture, rectangleCoord / textureSize(tex, 0)) * 5;
+	return texture(tex, rectangleCoord / textureSize(tex, 0)) + texture(bloomedFrameBufferTexture, rectangleCoord / textureSize(tex, 0)) * 2;
 }
 
 
